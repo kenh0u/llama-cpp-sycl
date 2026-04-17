@@ -1,19 +1,23 @@
-# llama.cpp SYCL build with Nix
+# llama.cpp SYCL build with Nix (FHS Wrapper)
 
 > [!IMPORTANT]
 > このドキュメントは AI によって自動生成されました。
 
-このプロジェクトは、Intel OneAPI (SYCL) をバックエンドに使用した `llama.cpp` を Nix でビルドし、NixOS 環境で動作させるための構成を提供します。
+このプロジェクトは、Intel OneAPI (SYCL) をバックエンドに使用した `llama.cpp` を Nix でビルドし、SYCL のランタイムが要求する FHS (Filesystem Hierarchy Standard) 依存性を解決するための `buildFHSEnv` 構成を提供します。
+
+## 背景
+
+Intel OneAPI SYCL ランタイム（特に Level Zero 経由）は、`/lib` や `/usr/lib` などの標準的なパスにライブラリや設定ファイルが存在することを期待する傾向が強く、純粋な Nix 環境では動作が不安定になる場合があります。この Flake では、実行環境を FHS 互換のサンドボックスにラップすることで、実機での高い互換性を確保しています。
 
 ## システム要件
 
-- **OS**: NixOS (x86_64-linux)
+- **OS**: NixOS または他の Linux ディストリビューション (x86_64-linux)
 - **Hardware**: Intel GPU (Arc, Data Center GPU, Integrated Graphics)
 - **Nix**: Flakes が有効であること
 
 ## ビルド方法
 
-Intel OneAPI Toolkit は Unfree ライセンスのパッケージを含み、またビルド時に環境変数へのアクセスを必要とするため、`--impure` フラグが必要です。
+ビルドには Unfree パッケージ (Intel OneAPI) の許可と、環境変数アクセスのための `--impure` フラグが必要です。
 
 ```bash
 # Unfree パッケージを許可
@@ -23,47 +27,47 @@ export NIXPKGS_ALLOW_UNFREE=1
 nix build --impure
 ```
 
-ビルドが完了すると、カレントディレクトリの `result` シンボリックリンク内にバイナリが生成されます。
+## 使い方
+
+ビルドされた成果物 `./result/bin/llama-cpp-sycl` は、FHS 環境を起動するためのラッパースクリプトです。
+
+### 1. FHS シェルに入る
+シェルに入ってからバイナリを実行するのが最も確実な方法です。
+
+```bash
+./result/bin/llama-cpp-sycl
+# シェル内
+llama-cli --version
+```
+
+### 2. 直接コマンドを実行する
+`-c` フラグを使用して、FHS 環境内で特定のコマンドを実行できます。
+
+```bash
+./result/bin/llama-cpp-sycl -c "llama-cli -m /path/to/model.gguf -p 'Hello' -ngl 99"
+```
 
 ## NixOS での実行準備
 
-SYCL を使用して Intel GPU で推論を行うには、NixOS の設定（`configuration.nix`）で GPU ドライバとランタイムが有効になっている必要があります。
+SYCL を使用して Intel GPU で推論を行うには、ホスト側の NixOS 設定で GPU ドライバが有効になっている必要があります。
 
 ```nix
 { pkgs, ... }: {
-  # Intel GPU ドライバの有効化
   hardware.graphics = {
     enable = true;
     extraPackages = with pkgs; [
-      intel-compute-runtime # OpenCL/SYCL 用
-      intel-media-driver    # VA-API 用
-      level-zero-loader     # OneAPI Level Zero
+      intel-compute-runtime
+      intel-media-driver
+      level-zero-loader
     ];
   };
 }
 ```
 
-## 使い方
+## 技術的な構成
 
-ビルドされたバイナリを直接実行します。
-
-```bash
-# CLI の実行例
-./result/bin/llama-cli -m /path/to/your/model.gguf -p "Hello, how are you?" -ngln 99
-
-# サーバーの実行例
-./result/bin/llama-server -m /path/to/your/model.gguf --host 0.0.0.0 --port 8080
-```
-
-### 主要なバイナリ
-
-- `llama-cli`: メインのコマンドラインインターフェース
-- `llama-server`: HTTP API サーバー
-- `llama-rpc-server`: 分散推論用 RPC サーバー
-
-## 技術的な詳細
-
-- **Compiler**: Intel OneAPI `icpx` (version 2025.3.1)
-- **Backend**: SYCL (OneAPI Level Zero)
-- **MKL**: ビルドおよび実行時に Intel MKL を使用するように構成されています
-- **Nixpkgs**: `nixpkgs-master` の最新の `llama-cpp` 定義をベースに、SYCL 向けにオーバーライドしています
+- **Unwrapped Package**: `packages.x86_64-linux.llama-cpp-sycl-unwrapped`
+    - Intel OneAPI `icpx` コンパイラを使用してビルドされた raw バイナリ。
+- **FHS Wrapper**: `packages.x86_64-linux.default`
+    - `buildFHSEnv` を使用。`/usr/lib` 等に Intel MKL, Level Zero, Compiler Runtimes を配置。
+    - 実行時に `ONEAPI_ROOT` 等を自動的に設定します。
