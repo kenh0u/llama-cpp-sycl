@@ -38,7 +38,7 @@ SYCL を使用して Intel GPU で推論を行うには、ホスト側の NixOS 
     extraPackages = with pkgs; [
       intel-compute-runtime
       intel-media-driver
-      level-zero-loader
+      level-zero
     ];
   };
 }
