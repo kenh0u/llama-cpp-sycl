@@ -98,16 +98,14 @@
           onednn
           
           # System libraries and tools
-          stdenv.cc.cc.lib
-          glibc
           zlib
-          bashInteractive
-          coreutils
         ];
 
         profile = ''
           export ONEAPI_ROOT=/usr
-          export LD_LIBRARY_PATH=/usr/lib:/usr/lib64:$LD_LIBRARY_PATH
+          export LD_LIBRARY_PATH=${pkgs.intel-compute-runtime}/lib:$LD_LIBRARY_PATH
+          export UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1
+          export ZES_ENABLE_SYSMAN=1
         '';
 
         runScript = "bash";
